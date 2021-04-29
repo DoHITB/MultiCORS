@@ -9,6 +9,7 @@
 
 static void register_hooks(apr_pool_t *pool);
 static int multiCORS_handler(request_rec *r);
+static int mcount(char *line);
 
 //Data structure
 typedef struct {
@@ -26,6 +27,7 @@ static const command_rec multiCORS_directives[] = {
   AP_INIT_TAKE1("Access-Control-Allow-Multi-Origin", multiCORS_set_domain, NULL, RSRC_CONF, "File to load"),
   {NULL}
 };
+
 
 //Register function
 module AP_MODULE_DECLARE_DATA multiCORS_module = {
@@ -83,6 +85,7 @@ const char *multiCORS_set_domain(cmd_parms *cmd, void *cfg, const char *arg){
   size_t len;
   char *line;
   int count = 0;
+  int slen = 0;
 
   //Avoid parsing a empty file
   if(arg == NULL)
@@ -104,16 +107,20 @@ const char *multiCORS_set_domain(cmd_parms *cmd, void *cfg, const char *arg){
 
   //"line" have each time a server to allow
   while((read = getline(&line, &len, msdr)) != -1 && count < 128){
-    fprintf(msdw, "\tLine: %s\n", line);
+    fprintf(msdw, "\tLine: %s", line);
 
-    //move "read - 1" to avoid \n char"
-    allowed_domains[count].domain = malloc(sizeof(char) * read);
-    memcpy(allowed_domains[count].domain, line, read - 1);
+    //search for exact path length
+    slen = mcount(line);
+
+    //allocate slen + 1 to allow \0
+    allowed_domains[count].domain = malloc(sizeof(char) * slen + 1);
+    memcpy(allowed_domains[count].domain, line, slen);
+    allowed_domains[count].domain[slen] = '\0';
 
     count++;
   }
 
-  fprintf(msdw, "Load phase ends\n");
+  fprintf(msdw, "\n\nLoad phase ends\n");
 
   //ensure that each unused domain is NULL
   for(;count < 128;count++)
@@ -130,11 +137,22 @@ const char *multiCORS_set_domain(cmd_parms *cmd, void *cfg, const char *arg){
   count = 0;
 
   while(count < 128 && allowed_domains[count].domain != NULL){
-    fprintf(msdw, "[%i]: %s\n", count, allowed_domains[count].domain);
+    fprintf(msdw, "[%i]: <%s>\n", count, allowed_domains[count].domain);
     count++;
   }
 
   fclose(msdw);
 
   return NULL;
+}
+
+static int mcount(char* line){
+  int cnt = 0;
+
+  while(line[cnt] != ' ' &&
+        line[cnt] != '\n' &&
+        line[cnt] != '\r')
+    cnt++;
+
+  return cnt;
 }
